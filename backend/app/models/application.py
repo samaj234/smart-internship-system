@@ -10,6 +10,9 @@ class Application(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending/accepted/rejected
     match_score = db.Column(db.Float)            # SBERT cosine similarity score
     applied_at = db.Column(db.DateTime, default=datetime.utcnow)
+    feedback_message = db.Column(db.Text)
+    interview_date = db.Column(db.DateTime)
+    start_date = db.Column(db.Date)
 
     def to_dict(self):
         return {

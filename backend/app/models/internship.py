@@ -32,5 +32,8 @@ class Internship(db.Model):
             "stipend": self.stipend,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "is_active": self.is_active,
+            "company_name": self.employer.company_name if self.employer else None,
+            "company_industry": self.employer.industry if self.employer else None,
+            "company_website": self.employer.website if self.employer else None,
         }
     

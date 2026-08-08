@@ -3,11 +3,12 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import API from '../api/axios'
-import { Mail, Lock, GraduationCap, Briefcase } from 'lucide-react'
+import { Mail, Lock, GraduationCap, Briefcase, Eye, EyeOff } from 'lucide-react'
 import studentImg from '../assets/student.png'
 import employerImg from '../assets/employer.png'
 
 export default function Login() {
+  const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState('student')
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
@@ -20,9 +21,19 @@ export default function Login() {
   e.preventDefault()
   setLoading(true)
   try {
-    const res = await API.post('/auth/login', { ...form, role })
+    // Don't send role to login — backend determines role from the account
+    const res = await API.post('/auth/login', {
+      email: form.email,
+      password: form.password
+    })
+    if (res.data.user.role !== role) {
+  toast.error(`This account is registered as an ${res.data.user.role}. Please select the correct account type.`)
+  setLoading(false)
+  return
+}
     login(res.data.user, res.data.access_token)
     toast.success('Welcome back!')
+    // Always navigate based on actual role from backend, not UI selection
     navigate(res.data.user.role === 'student' ? '/student/dashboard' : '/employer/dashboard')
   } catch (err) {
     toast.error(err.response?.data?.error || 'Login failed')
@@ -111,22 +122,25 @@ export default function Login() {
           </div>
 
           {/* Password */}
-          <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F] transition-colors">
-            <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">
-              Password
-            </label>
-            <div className="flex items-center gap-2">
-              <Lock size={16} className="text-gray-600" />
-              <input
-                type="password"
-                placeholder="••••••••"
-                className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required
-              />
-            </div>
-          </div>
+        <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F] transition-colors">
+  <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">
+    Password
+  </label>
+  <div className="flex items-center gap-2">
+    <Lock size={16} className="text-gray-600" />
+    <input
+      type={showPassword ? 'text' : 'password'}
+      placeholder="••••••••"
+      className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
+      value={form.password}
+      onChange={(e) => setForm({ ...form, password: e.target.value })}
+      required
+    />
+    <button type="button" onClick={() => setShowPassword(prev => !prev)} className="text-gray-400 hover:text-gray-600">
+      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  </div>
+</div>
 
           {/* Forgot password */}
           <div className="text-right">

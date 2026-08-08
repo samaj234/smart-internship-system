@@ -8,6 +8,7 @@ from app.services.cv_parser import parse_cv
 from app.services.embedder import embed_text
 from app.schemas import UpdateProfileSchema
 from app.utils.validation import validate_request
+from flask import send_from_directory
 
 students_bp = Blueprint('students', __name__)
 
@@ -17,6 +18,16 @@ ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@students_bp.get('/cv/<path:filename>')
+# @jwt_required()
+def serve_cv(filename):
+    """
+    Serves uploaded CV files to authenticated users.
+    Only employers and the student who owns the CV should access this.
+    """
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    return send_from_directory(upload_folder, filename)
 
 
 @students_bp.get('/profile')

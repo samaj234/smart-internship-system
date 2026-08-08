@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { User, Phone, GraduationCap, Award, Save, Loader2, Pencil, X, BarChart3 } from 'lucide-react'
 import API from '../api/axios'
 import CVUpload from '../components/CVUpload'
 import { useToast } from '../context/ToastContext'
+import { Calendar, PartyPopper } from 'lucide-react'
+
 
 export default function StudentDashboard() {
   const [profile, setProfile] = useState(null)
@@ -14,27 +16,28 @@ export default function StudentDashboard() {
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const toast = useToast()
-
-  const syncFormFromProfile = (data) => {
-    setForm({
-      full_name: data.full_name || '',
-      phone: data.phone || '',
-      university: data.university || '',
-      degree: data.degree || '',
-      gpa: data.gpa ?? '',
-      skills: (data.skills || []).join(', ')
-    })
-  }
+  const savedProfileRef = useRef(null)
 
   useEffect(() => {
+    console.log('StudentDashboard useEffect fired at', new Date().toISOString())
     let isMounted = true
 
     const fetchData = async () => {
       try {
         const profileRes = await API.get('/students/profile')
         if (!isMounted) return
-        setProfile(profileRes.data)
-        syncFormFromProfile(profileRes.data)
+
+        const profileData = profileRes.data
+        savedProfileRef.current = profileData
+        setProfile(profileData)
+        setForm({
+          full_name: profileData.full_name || '',
+          phone: profileData.phone || '',
+          university: profileData.university || '',
+          degree: profileData.degree || '',
+          gpa: profileData.gpa ?? '',
+          skills: (profileData.skills || []).join(', ')
+        })
       } catch (err) {
         if (isMounted) toast.error('Could not load profile')
       } finally {
@@ -43,26 +46,48 @@ export default function StudentDashboard() {
 
       try {
         const appsRes = await API.get('/matching/my-applications')
-        if (isMounted) setApplications(appsRes.data.applications || [])
+        if (isMounted) {
+          console.log('my-applications response:', appsRes.data)
+          setApplications(appsRes.data.applications || [])
+        }
       } catch (err) {
+        console.error('my-applications error:', err.response?.data)
         if (isMounted) setApplications([])
       }
     }
 
     fetchData()
 
-    return () => {
-      isMounted = false
-    }
-  })
+    return () => { isMounted = false }
+  }, [])
 
   const handleEditClick = () => {
-    syncFormFromProfile(profile)
+    const saved = savedProfileRef.current
+    if (saved) {
+      setForm({
+        full_name: saved.full_name || '',
+        phone: saved.phone || '',
+        university: saved.university || '',
+        degree: saved.degree || '',
+        gpa: saved.gpa ?? '',
+        skills: (saved.skills || []).join(', ')
+      })
+    }
     setIsEditing(true)
   }
 
   const handleCancel = () => {
-    syncFormFromProfile(profile)
+    const saved = savedProfileRef.current
+    if (saved) {
+      setForm({
+        full_name: saved.full_name || '',
+        phone: saved.phone || '',
+        university: saved.university || '',
+        degree: saved.degree || '',
+        gpa: saved.gpa ?? '',
+        skills: (saved.skills || []).join(', ')
+      })
+    }
     setIsEditing(false)
   }
 
@@ -72,12 +97,15 @@ export default function StudentDashboard() {
     try {
       const skillsArray = form.skills.split(',').map(s => s.trim()).filter(Boolean)
       const res = await API.put('/students/profile', {
-        ...form,
+        full_name: form.full_name,
+        phone: form.phone,
+        university: form.university,
+        degree: form.degree,
         gpa: form.gpa ? parseFloat(form.gpa) : null,
         skills: skillsArray
       })
       setProfile(res.data)
-      syncFormFromProfile(res.data)
+      savedProfileRef.current = res.data
       toast.success('Profile updated successfully')
       setIsEditing(false)
     } catch (err) {
@@ -89,7 +117,17 @@ export default function StudentDashboard() {
 
   const handleCvSuccess = (updatedProfile) => {
     setProfile(updatedProfile)
-    syncFormFromProfile(updatedProfile)
+    savedProfileRef.current = updatedProfile
+    if (!isEditing) {
+      setForm({
+        full_name: updatedProfile.full_name || '',
+        phone: updatedProfile.phone || '',
+        university: updatedProfile.university || '',
+        degree: updatedProfile.degree || '',
+        gpa: updatedProfile.gpa ?? '',
+        skills: (updatedProfile.skills || []).join(', ')
+      })
+    }
     toast.success('CV processed — profile updated')
   }
 
@@ -113,7 +151,7 @@ export default function StudentDashboard() {
       <p className="text-gray-400 text-sm mb-6">Manage your profile and track your applications</p>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Profile: view mode or edit mode */}
+        {/* Profile card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-gray-800 flex items-center gap-2">
@@ -137,7 +175,6 @@ export default function StudentDashboard() {
           </div>
 
           {!isEditing ? (
-            // ---------- VIEW MODE ----------
             <div className="space-y-3">
               <ProfileField icon={<User size={14} />} label="Full Name" value={profile?.full_name} />
               <ProfileField icon={<Phone size={14} />} label="Phone" value={profile?.phone} />
@@ -167,7 +204,6 @@ export default function StudentDashboard() {
               </div>
             </div>
           ) : (
-            // ---------- EDIT MODE ----------
             <form onSubmit={handleSave} className="space-y-3">
               <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F]">
                 <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">Full Name</label>
@@ -175,7 +211,7 @@ export default function StudentDashboard() {
                   type="text"
                   className="w-full outline-none text-sm text-gray-700 bg-transparent"
                   value={form.full_name}
-                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                  onChange={(e) => setForm(prev => ({ ...prev, full_name: e.target.value }))}
                 />
               </div>
 
@@ -187,7 +223,7 @@ export default function StudentDashboard() {
                     type="text"
                     className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
                     value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))}
                   />
                 </div>
               </div>
@@ -200,7 +236,7 @@ export default function StudentDashboard() {
                     type="text"
                     className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
                     value={form.university}
-                    onChange={(e) => setForm({ ...form, university: e.target.value })}
+                    onChange={(e) => setForm(prev => ({ ...prev, university: e.target.value }))}
                   />
                 </div>
               </div>
@@ -212,7 +248,7 @@ export default function StudentDashboard() {
                     type="text"
                     className="w-full outline-none text-sm text-gray-700 bg-transparent"
                     value={form.degree}
-                    onChange={(e) => setForm({ ...form, degree: e.target.value })}
+                    onChange={(e) => setForm(prev => ({ ...prev, degree: e.target.value }))}
                   />
                 </div>
                 <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F]">
@@ -224,7 +260,7 @@ export default function StudentDashboard() {
                     max="4"
                     className="w-full outline-none text-sm text-gray-700 bg-transparent"
                     value={form.gpa}
-                    onChange={(e) => setForm({ ...form, gpa: e.target.value })}
+                    onChange={(e) => setForm(prev => ({ ...prev, gpa: e.target.value }))}
                   />
                 </div>
               </div>
@@ -238,7 +274,7 @@ export default function StudentDashboard() {
                     className="flex-1 outline-none text-sm text-gray-700 bg-transparent resize-none"
                     placeholder="Python, React, SQL..."
                     value={form.skills}
-                    onChange={(e) => setForm({ ...form, skills: e.target.value })}
+                    onChange={(e) => setForm(prev => ({ ...prev, skills: e.target.value }))}
                   />
                 </div>
               </div>
@@ -257,7 +293,7 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* CV upload */}
+        {/* CV Upload */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="font-bold text-gray-800 mb-4">Upload your CV</h2>
           <p className="text-sm text-gray-400 mb-4">
@@ -279,22 +315,46 @@ export default function StudentDashboard() {
           </p>
         ) : (
           <div className="space-y-2">
-            {applications.map((app) => (
-              <div key={app.id} className="flex items-center justify-between border border-gray-100 rounded-xl px-4 py-3">
-                <div>
-                  <p className="font-medium text-gray-800 text-sm">{app.internship?.title}</p>
-                  <p className="text-xs text-gray-400">Applied {new Date(app.applied_at).toLocaleDateString()}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {app.match_score != null && (
-                    <span className="text-xs text-gray-500">{Math.round(app.match_score * 100)}% match</span>
-                  )}
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${statusColor(app.status)}`}>
-                    {app.status}
-                  </span>
-                </div>
-              </div>
-            ))}
+           {applications.map((app) => (
+  <div key={app.id} className="border border-gray-100 rounded-xl px-4 py-3">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="font-medium text-gray-800 text-sm">{app.internship?.title}</p>
+        <p className="text-xs text-gray-400">
+          Applied {new Date(app.applied_at).toLocaleDateString()}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        {app.match_score != null && (
+          <span className="text-xs text-gray-500">
+            {Math.round(app.match_score * 100)}% match
+          </span>
+        )}
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${statusColor(app.status)}`}>
+          {app.status}
+        </span>
+      </div>
+    </div>
+
+    {(app.feedback_message || app.interview_date || app.start_date) && (
+      <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+        {app.feedback_message && (
+          <p className="text-sm text-gray-600">{app.feedback_message}</p>
+        )}
+        {app.interview_date && (
+          <p className="text-xs text-[#1AA29F] font-medium">
+             <Calendar size={13} /> Interview: {new Date(app.interview_date).toLocaleString()}
+          </p>
+        )}
+        {app.start_date && (
+          <p className="text-xs text-[#1AA29F] font-medium">
+           <PartyPopper size={13} /> Proposed start date: {new Date(app.start_date).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+    )}
+  </div>
+))}
           </div>
         )}
       </div>

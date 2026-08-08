@@ -71,6 +71,10 @@ class UpdateApplicationStatusSchema(BaseSchema):
     status = fields.String(required=True, validate=validate.OneOf(["pending", "accepted", "rejected"]))
 
 
+class UpdateApplicationFeedbackSchema(BaseSchema):
+    feedback_message = fields.String(required=False, validate=validate.Length(max=2000), allow_none=True)
+    interview_date = fields.DateTime(required=False, allow_none=True)
+    start_date = fields.Date(required=False, allow_none=True)
 # ---------- Chat ----------
 
 class ChatMessageSchema(BaseSchema):

@@ -15,6 +15,7 @@ class Student(db.Model):
     cv_path = db.Column(db.String(255))        # path to uploaded CV file
     profile_embedding = db.Column(db.JSON)     # SBERT vector stored as list
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    certifications = db.Column(db.JSON)
 
     # Relationships
     applications = db.relationship('Application', backref='student')
@@ -30,4 +31,5 @@ class Student(db.Model):
             "gpa": self.gpa,
             "skills": self.skills,
             "cv_path": self.cv_path,
+            "profile_embedding": None
         }

@@ -3,24 +3,34 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 import API from '../api/axios'
-import { Mail, Lock, User, Building2 } from 'lucide-react'
+import { Mail, Lock, User, Building2, Eye, EyeOff } from 'lucide-react'
 import studentImg from '../assets/student.png'
 import employerImg from '../assets/employer.png'
 
 export default function Register() {
+  
   const [role, setRole] = useState('student')
   const [form, setForm] = useState({
-    email: '', password: '', full_name: '', company_name: ''
+    email: '', password: '', confirmPassword: '',full_name: '', company_name: ''
   })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
 
-  const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
   e.preventDefault()
+
+  if (form.password !== form.confirmPassword) {
+    toast.error('Passwords do not match')
+    return
+  }
+
   setLoading(true)
+  
   try {
     await API.post('/auth/register', { ...form, role })
     const res = await API.post('/auth/login', { email: form.email, password: form.password })
@@ -177,21 +187,44 @@ export default function Register() {
           </div>
 
           <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F] transition-colors">
-            <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">
-              Password
-            </label>
-            <div className="flex items-center gap-2">
-              <Lock size={16} className="text-gray-600" />
-              <input
-                type="password"
-                placeholder="••••••••"
-                className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required
-              />
-            </div>
-          </div>
+  <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">
+    Password
+  </label>
+  <div className="flex items-center gap-2">
+    <Lock size={16} className="text-gray-600" />
+    <input
+      type={showPassword ? 'text' : 'password'}
+      placeholder="••••••••"
+      className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
+      value={form.password}
+      onChange={(e) => setForm({ ...form, password: e.target.value })}
+      required
+    />
+    <button type="button" onClick={() => setShowPassword(prev => !prev)} className="text-gray-400 hover:text-gray-600">
+      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  </div>
+</div>
+
+<div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F] transition-colors">
+  <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">
+    Confirm Password
+  </label>
+  <div className="flex items-center gap-2">
+    <Lock size={16} className="text-gray-600" />
+    <input
+      type={showConfirmPassword ? 'text' : 'password'}
+      placeholder="••••••••"
+      className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
+      value={form.confirmPassword}
+      onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+      required
+    />
+    <button type="button" onClick={() => setShowConfirmPassword(prev => !prev)} className="text-gray-400 hover:text-gray-600">
+      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  </div>
+</div>
 
           <div className="flex justify-between items-center pt-1">
             <p className="text-sm text-gray-400">

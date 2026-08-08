@@ -2,12 +2,28 @@ import { useState, useEffect } from 'react'
 import { Loader2, AlertCircle, ArrowLeft, TrendingUp, Check, X, Mail, Phone, GraduationCap } from 'lucide-react'
 import API from '../api/axios'
 import { useToast } from '../context/ToastContext'
+import { Calendar, PartyPopper } from 'lucide-react'
+
+// ── Date formatting helpers for feedback form pre-fill ──
+const toDatetimeLocal = (isoString) => {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const toDateInput = (isoString) => {
+  if (!isoString) return ''
+  return isoString.split('T')[0]
+}
 
 export default function ApplicantsList({ internshipId, onBack }) {
   const [applicants, setApplicants] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [updatingId, setUpdatingId] = useState(null)
+  const [feedbackDraft, setFeedbackDraft] = useState({})
+  const [expandedId, setExpandedId] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -45,6 +61,35 @@ export default function ApplicantsList({ internshipId, onBack }) {
     setUpdatingId(null)
   }
 }
+
+  const handleSendFeedback = async (applicationId) => {
+  setUpdatingId(applicationId)
+  const draft = feedbackDraft[applicationId] || {}
+  try {
+    const res = await API.patch(`/matching/applications/${applicationId}/feedback`, {
+      feedback_message: draft.message || null,
+      interview_date: draft.interviewDate || null,
+      start_date: draft.startDate || null,
+    })
+    setApplicants(prev =>
+      prev.map(a => a.application_id === applicationId
+        ? {
+            ...a,
+            feedback_message: res.data.application?.feedback_message,
+            interview_date: res.data.application?.interview_date,
+            start_date: res.data.application?.start_date,
+          }
+        : a
+      )
+    )
+    toast.success('Feedback sent')
+    setExpandedId(null)
+  } catch (err) {
+    toast.error(err.response?.data?.error || 'Failed to send feedback')
+  } finally {
+    setUpdatingId(null)
+  }
+} 
 
   const getScoreColor = (pct) => {
     const num = parseFloat(pct)
@@ -133,15 +178,89 @@ export default function ApplicantsList({ internshipId, onBack }) {
                   </div>
                 )}
 
+                {a.student.certifications?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {a.student.certifications.slice(0, 4).map((cert, i) => (
+                      <span
+                        key={i}
+                        className="bg-amber-50 text-amber-700 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-200"
+                      >
+                        🎓 {cert}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <p className="text-xs text-gray-400 mt-2">
                   Applied {new Date(a.applied_at).toLocaleDateString()}
                 </p>
+
+                {/* Existing feedback summary, shown even when form is collapsed */}
+                {(a.feedback_message || a.interview_date || a.start_date) && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+                    {a.feedback_message && (
+                      <p className="text-xs text-gray-600">{a.feedback_message}</p>
+                    )}
+                    {a.interview_date && (
+                      <p className="text-xs text-[#1AA29F] font-medium">
+                         <Calendar size={13} />Interview: {new Date(a.interview_date).toLocaleString()}
+                      </p>
+                    )}
+                    {a.start_date && (
+                      <p className="text-xs text-[#1AA29F] font-medium">
+                        <PartyPopper size={13} /> Start date: {new Date(a.start_date).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Expandable feedback form */}
+                {expandedId === a.application_id && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-xl space-y-2 max-w-sm">
+                    <div>
+                      <label className="text-xs text-gray-500">Message to candidate</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Optional message..."
+                        className="w-full text-xs border border-gray-200 rounded-lg p-2 mt-1 outline-none focus:border-[#1AA29F] bg-white"
+                        value={feedbackDraft[a.application_id]?.message || ''}
+                        onChange={(e) => setFeedbackDraft(prev => ({
+                          ...prev,
+                          [a.application_id]: { ...prev[a.application_id], message: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Interview date & time</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full text-xs border border-gray-200 rounded-lg p-2 mt-1 outline-none focus:border-[#1AA29F] bg-white"
+                        value={feedbackDraft[a.application_id]?.interviewDate || ''}
+                        onChange={(e) => setFeedbackDraft(prev => ({
+                          ...prev,
+                          [a.application_id]: { ...prev[a.application_id], interviewDate: e.target.value }
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Proposed start date</label>
+                      <input
+                        type="date"
+                        className="w-full text-xs border border-gray-200 rounded-lg p-2 mt-1 outline-none focus:border-[#1AA29F] bg-white"
+                        value={feedbackDraft[a.application_id]?.startDate || ''}
+                        onChange={(e) => setFeedbackDraft(prev => ({
+                          ...prev,
+                          [a.application_id]: { ...prev[a.application_id], startDate: e.target.value }
+                        }))}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 shrink-0">
                 {a.student.cv_path && (
-                  
-                   <a href={`http://localhost:5000/${a.student.cv_path}`}
+                  <a href={`http://localhost:5000/api/students/cv/${a.student.cv_path.split(/[\\/]/).pop()}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-center"
@@ -150,6 +269,36 @@ export default function ApplicantsList({ internshipId, onBack }) {
                   </a>
                 )}
                 <button
+                  onClick={() => {
+                    const nextId = expandedId === a.application_id ? null : a.application_id
+                    setExpandedId(nextId)
+
+                    if (nextId && !feedbackDraft[a.application_id]) {
+                      setFeedbackDraft(prev => ({
+                        ...prev,
+                        [a.application_id]: {
+                          message: a.feedback_message || '',
+                          interviewDate: toDatetimeLocal(a.interview_date),
+                          startDate: toDateInput(a.start_date),
+                        }
+                      }))
+                    }
+                  }}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  {expandedId === a.application_id ? 'Hide' : 'Add'} feedback
+                </button>
+
+                {a.status !== 'pending' && expandedId === a.application_id && (
+                    <button
+                      onClick={() => handleSendFeedback(a.application_id)}
+                      disabled={updatingId === a.application_id}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#1AA29F] text-white hover:bg-[#158a87] disabled:opacity-50 transition-colors"
+                    >
+                      {updatingId === a.application_id ? 'Sending...' : 'Send Feedback'}
+                    </button>
+                  )}
+                                  <button
                   onClick={() => handleStatusUpdate(a.application_id, 'accepted')}
                   disabled={updatingId === a.application_id || a.status === 'accepted'}
                   className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#e6f7f7] text-[#1AA29F] hover:bg-[#d0efef] disabled:opacity-50 transition-colors"
