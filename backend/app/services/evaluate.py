@@ -8,7 +8,6 @@ from sklearn.metrics import (
 )
 from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine
 from sentence_transformers import SentenceTransformer
-from scipy.stats import spearmanr, pearsonr
 from app.services.tfidf_matcher import TFIDFMatcher
 from app.services.preprocessing import preprocess_for_sbert
 from app.services.data_loader import load_recruitment_dataset
@@ -16,12 +15,33 @@ from app.services.resume_loader import load_resume_dataset
 from app.services.rjdb_loader import load_rjdb_dataset as load_rjdb
 
 
+# ── numpy replacements for scipy.stats ──────────────────────────────────────
+
+def pearsonr(x, y):
+    x, y = np.array(x), np.array(y)
+    xm, ym = x - x.mean(), y - y.mean()
+    denom = np.linalg.norm(xm) * np.linalg.norm(ym)
+    r = float(np.dot(xm, ym) / denom) if denom != 0 else 0.0
+    return r, None
 
 
+class _SpearmanResult:
+    def __init__(self, correlation):
+        self.correlation = correlation
+
+
+def spearmanr(x, y):
+    x, y = np.array(x), np.array(y)
+    rx = np.argsort(np.argsort(x)).astype(float)
+    ry = np.argsort(np.argsort(y)).astype(float)
+    r, _ = pearsonr(rx, ry)
+    return _SpearmanResult(r)
+
+# ────────────────────────────────────────────────────────────────────────────
 
 
 # SBERT model — loaded once at module level
-_sbert_model = SentenceTransformer('BAAI/bge-base-en-v1.5')
+_sbert_model = SentenceTransformer('all-mpnet-base-v2')
 
 # Paths
 BASE_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
@@ -387,8 +407,6 @@ def run_rjdb_evaluation(
     )
 
     # Skill gap analysis on filtered_skills
-    # Shows which specific skills TF-IDF and SBERT are most
-    # sensitive to — supports the XAI narrative in your report
     skill_gap_analysis = _analyze_skill_sensitivity(
         df, sbert_scores, tfidf_scores
     )
@@ -436,9 +454,6 @@ def _analyze_skill_sensitivity(
     df['sbert_score'] = sbert_scores
     df['tfidf_score'] = tfidf_scores
 
-    # Get matched/unmatched pairs — they share the same job
-    # We can identify them because they appear consecutively
-    # (matched first, unmatched second per our loader)
     matched = df[df['pair_type'] == 'matched'].copy()
     unmatched = df[df['pair_type'] == 'unmatched'].copy()
 
@@ -454,7 +469,6 @@ def _analyze_skill_sensitivity(
     print(f"  SBERT  — matched: {avg_sbert_matched:.4f}, unmatched: {avg_sbert_unmatched:.4f}, drop: {avg_sbert_matched - avg_sbert_unmatched:.4f}")
     print(f"  TF-IDF — matched: {avg_tfidf_matched:.4f}, unmatched: {avg_tfidf_unmatched:.4f}, drop: {avg_tfidf_matched - avg_tfidf_unmatched:.4f}")
 
-    # Most commonly filtered skills
     all_filtered = []
     for skills in df['filtered_skills']:
         if isinstance(skills, list):
