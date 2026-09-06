@@ -96,13 +96,13 @@ def forgot_password():
 
     try:
         msg = Message(
-            subject="Smart Internship — Password Reset",
+            subject="InternLink — Password Reset",
             recipients=[email],
             html=f"""
             <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 30px; border-radius: 10px; background: #f0f4ff;">
                 <h2 style="color: #3b82f6; text-align: center;"> Password Reset</h2>
                 <p style="color: #555;">Hello,</p>
-                <p style="color: #555;">You requested a password reset for your Smart Internship account.</p>
+                <p style="color: #555;">You requested a password reset for your InternLink account.</p>
                 <p style="color: #555;">Click the button below to reset your password:</p>
                 <div style="text-align: center; margin: 30px 0;">
                     <a href="{reset_link}"

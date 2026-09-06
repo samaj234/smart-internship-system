@@ -9,6 +9,7 @@ export default function Recommendations() {
   const [loading, setLoading] = useState(true)
   const [error, setBannerError] = useState('')
   const [applyingId, setApplyingId] = useState(null)
+  const [unapplyingId, setUnapplyingId] = useState(null)
   const [appliedIds, setAppliedIds] = useState(new Set())
   const toast = useToast()
 
@@ -27,9 +28,12 @@ export default function Recommendations() {
 
         setRecommendations(recRes.data.recommendations || [])
 
-        // Pre-populate appliedIds from existing applications
+        // Pre-populate appliedIds from existing applications, excluding
+        // ones the student has since withdrawn — otherwise a withdrawn
+        // application reappears as "Applied" on the next page load.
         const existingIds = new Set(
           (appsRes.data.applications || [])
+            .filter(app => app.status !== 'withdrawn')
             .map(app => app.internship?.id)
             .filter(Boolean)
         )
@@ -51,16 +55,39 @@ export default function Recommendations() {
     return () => { isMounted = false }
   }, [])
 
-  const handleApply = async (internshipId) => {
+  const handleApply = async (internshipId, documents) => {
     setApplyingId(internshipId)
     try {
-      await API.post(`/matching/apply/${internshipId}`)
+      const formData = new FormData()
+      if (documents?.coverLetter) formData.append('cover_letter', documents.coverLetter)
+      if (documents?.recommendationLetter) formData.append('recommendation_letter', documents.recommendationLetter)
+
+      await API.post(`/matching/apply/${internshipId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
       setAppliedIds(prev => new Set(prev).add(internshipId))
       toast.success('Application submitted!')
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to apply')
     } finally {
       setApplyingId(null)
+    }
+  }
+
+  const handleUnapply = async (internshipId) => {
+    setUnapplyingId(internshipId)
+    try {
+      await API.delete(`/matching/apply/${internshipId}`)
+      setAppliedIds(prev => {
+        const next = new Set(prev)
+        next.delete(internshipId)
+        return next
+      })
+      toast.success('Application withdrawn')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to withdraw application')
+    } finally {
+      setUnapplyingId(null)
     }
   }
 
@@ -113,7 +140,7 @@ export default function Recommendations() {
                   {notApplied.length}
                 </span>
               </div>
-              <div className="grid md:grid-cols-2 gap-5 items-start">
+              <div className="grid md:grid-cols-2 gap-5">
                 {notApplied.map((rec) => (
                   <MatchCard
                     key={rec.internship.id}
@@ -123,7 +150,9 @@ export default function Recommendations() {
                     explanation={rec.explanation}
                     learningRecommendations={rec.learning_recommendations}
                     onApply={handleApply}
+                    onUnapply={handleUnapply}
                     applying={applyingId === rec.internship.id}
+                    unapplying={unapplyingId === rec.internship.id}
                     applied={false}
                   />
                 ))}
@@ -143,7 +172,7 @@ export default function Recommendations() {
                   {applied.length}
                 </span>
               </div>
-              <div className="grid md:grid-cols-2 gap-5 items-start">
+              <div className="grid md:grid-cols-2 gap-5">
                 {applied.map((rec) => (
                   <MatchCard
                     key={rec.internship.id}
@@ -153,7 +182,9 @@ export default function Recommendations() {
                     explanation={rec.explanation}
                     learningRecommendations={rec.learning_recommendations}
                     onApply={handleApply}
+                    onUnapply={handleUnapply}
                     applying={false}
+                    unapplying={unapplyingId === rec.internship.id}
                     applied={true}
                   />
                 ))}

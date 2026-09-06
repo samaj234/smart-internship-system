@@ -17,6 +17,7 @@ export default function Internships() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalResults, setTotalResults] = useState(0)
   const [applyingId, setApplyingId] = useState(null)
+  const [unapplyingId, setUnapplyingId] = useState(null)
   const [appliedIds, setAppliedIds] = useState(new Set())
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -59,7 +60,7 @@ export default function Internships() {
     }
   }, [page, debouncedSearch])
 
-  const handleApply = async (internshipId) => {
+  const handleApply = async (internshipId, documents) => {
     if (!user) {
       navigate('/login')
       return
@@ -71,13 +72,36 @@ export default function Internships() {
 
     setApplyingId(internshipId)
     try {
-      await API.post(`/matching/apply/${internshipId}`)
+      const formData = new FormData()
+      if (documents?.coverLetter) formData.append('cover_letter', documents.coverLetter)
+      if (documents?.recommendationLetter) formData.append('recommendation_letter', documents.recommendationLetter)
+
+      await API.post(`/matching/apply/${internshipId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
       setAppliedIds(prev => new Set(prev).add(internshipId))
       toast.success('Application submitted!')
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to apply')
     } finally {
       setApplyingId(null)
+    }
+  }
+
+  const handleUnapply = async (internshipId) => {
+    setUnapplyingId(internshipId)
+    try {
+      await API.delete(`/matching/apply/${internshipId}`)
+      setAppliedIds(prev => {
+        const next = new Set(prev)
+        next.delete(internshipId)
+        return next
+      })
+      toast.success('Application withdrawn')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to withdraw application')
+    } finally {
+      setUnapplyingId(null)
     }
   }
 
@@ -132,14 +156,18 @@ export default function Internships() {
         </div>
       ) : (
         <>
-          <div className="grid md:grid-cols-2 gap-5 items-start">
+          <div className="grid md:grid-cols-2 gap-5">
             {internships.map((job) => (
               <MatchCard
                 key={job.id}
                 internship={job}
                 onApply={handleApply}
+                onUnapply={handleUnapply}
                 applying={applyingId === job.id}
+                unapplying={unapplyingId === job.id}
                 applied={appliedIds.has(job.id)}
+                isAuthenticated={!!user}
+                onLoginRequired={() => navigate('/login')}
               />
             ))}
           </div>

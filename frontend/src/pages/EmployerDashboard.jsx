@@ -83,6 +83,15 @@ export default function EmployerDashboard() {
     setView('post')
   }
 
+  // Deadline-based expiry is computed here rather than trusting a stored
+  // flag, since the backend hides expired listings from students purely
+  // at query time (no background job flips a stored status) — so "expired"
+  // has to be derived the same way on this read too.
+  const isExpired = (deadline) => {
+    if (!deadline) return false
+    return new Date(deadline) < new Date()
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
@@ -168,6 +177,11 @@ export default function EmployerDashboard() {
                     {!job.is_active && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
                         Inactive
+                      </span>
+                    )}
+                    {job.is_active && isExpired(job.deadline) && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-500">
+                        Expired — hidden from students
                       </span>
                     )}
                   </div>

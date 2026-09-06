@@ -80,3 +80,21 @@ def build_combined_text(skills: list, raw_text: str = "", role: str = "") -> str
     if raw_text:
         parts.append(raw_text[:300])  # cap raw text to avoid diluting skills
     return " ".join(parts)
+
+def build_sbert_text(skills: list, raw_text: str = "", role: str = "") -> str:
+    """
+    Builds natural-sentence input for SBERT, without the skill
+    repetition used in build_combined_text() for TF-IDF weighting.
+    SBERT works on sentence structure and context, not term
+    frequency — repeating keywords doesn't help it and may dilute
+    the semantic signal from real sentences. Use this for SBERT
+    embeddings; keep build_combined_text() for TF-IDF.
+    """
+    parts = []
+    if role:
+        parts.append(role)
+    if raw_text:
+        parts.append(raw_text[:500])
+    if skills:
+        parts.append("Skills: " + ", ".join(skills))
+    return " ".join(parts)

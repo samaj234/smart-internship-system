@@ -2,7 +2,11 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 
 # Load model once at startup
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# Swapped from all-MiniLM-L6-v2 to all-mpnet-base-v2: slower and larger
+# (~420MB vs ~90MB) but scores meaningfully higher on semantic similarity
+# benchmarks. Re-run rjdb_evaluator.py after this change to confirm the
+# improvement actually shows up on your data before committing to it.
+model = SentenceTransformer('all-mpnet-base-v2')
 
 
 def embed_text(text: str) -> list:

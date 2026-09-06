@@ -20,7 +20,7 @@ RESULTS_PATH = os.path.join(BASE_DIR, 'dataset', 'semantic_evaluation_results.js
 PAIRS_PATH = os.path.join(BASE_DIR, 'dataset', 'semantic_pairs.csv')
 
 # SBERT model — loaded once
-_sbert = SentenceTransformer('all-MiniLM-L6-v2')
+_sbert =  SentenceTransformer('all-mpnet-base-v2')  
 
 # Domain keyword mapping — connects job query categories
 # to resume text keywords so we can pair them meaningfully

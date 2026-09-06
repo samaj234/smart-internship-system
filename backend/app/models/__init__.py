@@ -3,3 +3,5 @@ from .student import Student
 from .employer import Employer
 from .internship import Internship
 from .application import Application
+from .certificate import Certificate
+from .notification import Notification

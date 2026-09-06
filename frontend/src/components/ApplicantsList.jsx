@@ -3,6 +3,7 @@ import { Loader2, AlertCircle, ArrowLeft, TrendingUp, Check, X, Mail, Phone, Gra
 import API from '../api/axios'
 import { useToast } from '../context/ToastContext'
 import { Calendar, PartyPopper } from 'lucide-react'
+import { Award } from "lucide-react";
 
 // ── Date formatting helpers for feedback form pre-fill ──
 const toDatetimeLocal = (isoString) => {
@@ -24,6 +25,7 @@ export default function ApplicantsList({ internshipId, onBack }) {
   const [updatingId, setUpdatingId] = useState(null)
   const [feedbackDraft, setFeedbackDraft] = useState({})
   const [expandedId, setExpandedId] = useState(null)
+  const [viewingDoc, setViewingDoc] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -104,6 +106,27 @@ export default function ApplicantsList({ internshipId, onBack }) {
     return 'bg-amber-50 text-amber-600'
   }
 
+  // Certificate/cover-letter/recommendation-letter routes require a JWT,
+  // so a plain <a href> won't work — the browser doesn't attach the auth
+  // header on a normal navigation. Fetch via axios (which does attach it)
+  // and open the result as a blob URL instead, same pattern used in
+  // CertificateManager for the student's own certificate view.
+  const handleViewDocument = async (path, key) => {
+    setViewingDoc(key)
+    try {
+      const res = await API.get(path, { responseType: 'blob' })
+      const blobUrl = window.URL.createObjectURL(res.data)
+      window.open(blobUrl, '_blank')
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000)
+    } catch (err) {
+      toast.error('Could not open document')
+    } finally {
+      setViewingDoc(null)
+    }
+  }
+
+  const filenameFromPath = (filepath) => filepath ? filepath.split(/[\\/]/).pop() : null
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-10">
@@ -178,18 +201,51 @@ export default function ApplicantsList({ internshipId, onBack }) {
                   </div>
                 )}
 
-                {a.student.certifications?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {a.student.certifications.slice(0, 4).map((cert, i) => (
-                      <span
-                        key={i}
-                        className="bg-amber-50 text-amber-700 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-200"
-                      >
-                        🎓 {cert}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {/* Documents — CV, cover letter, recommendation letter,
+                    and any certificates from the student's profile
+                    library. All fetched with the auth header attached
+                    and opened as a blob in a new tab, since these routes
+                    require a JWT that a plain <a href> can't send. */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {a.student.cv_path && (
+                    <button
+                      onClick={() => handleViewDocument(`/students/cv/${filenameFromPath(a.student.cv_path)}`, `cv-${a.application_id}`)}
+                      disabled={viewingDoc === `cv-${a.application_id}`}
+                      className="text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      {viewingDoc === `cv-${a.application_id}` ? 'Opening...' : 'View CV'}
+                    </button>
+                  )}
+                  {a.cover_letter_path && (
+                    <button
+                      onClick={() => handleViewDocument(`/matching/applications/documents/${filenameFromPath(a.cover_letter_path)}`, `cover-${a.application_id}`)}
+                      disabled={viewingDoc === `cover-${a.application_id}`}
+                      className="text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      {viewingDoc === `cover-${a.application_id}` ? 'Opening...' : 'View cover letter'}
+                    </button>
+                  )}
+                  {a.recommendation_letter_path && (
+                    <button
+                      onClick={() => handleViewDocument(`/matching/applications/documents/${filenameFromPath(a.recommendation_letter_path)}`, `rec-${a.application_id}`)}
+                      disabled={viewingDoc === `rec-${a.application_id}`}
+                      className="text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      {viewingDoc === `rec-${a.application_id}` ? 'Opening...' : 'View recommendation letter'}
+                    </button>
+                  )}
+                  {a.certificates?.map((cert) => (
+                    <button
+                      key={cert.id}
+                      onClick={() => handleViewDocument(`/students/certificates/${cert.id}/file`, `cert-${cert.id}`)}
+                      disabled={viewingDoc === `cert-${cert.id}`}
+                      title={cert.original_filename}
+                      className="text-xs font-medium px-2.5 py-1 rounded-full border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors truncate max-w-[160px] disabled:opacity-50"
+                    >
+                      {viewingDoc === `cert-${cert.id}` ? 'Opening...' : cert.original_filename}
+                    </button>
+                  ))}
+                </div>
 
                 <p className="text-xs text-gray-400 mt-2">
                   Applied {new Date(a.applied_at).toLocaleDateString()}
@@ -259,15 +315,6 @@ export default function ApplicantsList({ internshipId, onBack }) {
               </div>
 
               <div className="flex flex-col gap-2 shrink-0">
-                {a.student.cv_path && (
-                  <a href={`http://localhost:5000/api/students/cv/${a.student.cv_path.split(/[\\/]/).pop()}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-center"
-                  >
-                    View CV
-                  </a>
-                )}
                 <button
                   onClick={() => {
                     const nextId = expandedId === a.application_id ? null : a.application_id

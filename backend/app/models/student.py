@@ -13,12 +13,13 @@ class Student(db.Model):
     gpa = db.Column(db.Float)
     skills = db.Column(db.JSON)               # ["Python", "React", ...]
     cv_path = db.Column(db.String(255))        # path to uploaded CV file
+    raw_text = db.Column(db.Text)              # extracted CV text, used as SBERT context for matching
     profile_embedding = db.Column(db.JSON)     # SBERT vector stored as list
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     certifications = db.Column(db.JSON)
 
-    # Relationships
     applications = db.relationship('Application', backref='student')
+    certificates = db.relationship('Certificate', backref='student', cascade='all, delete-orphan')
 
     def to_dict(self):
         return {
@@ -31,5 +32,6 @@ class Student(db.Model):
             "gpa": self.gpa,
             "skills": self.skills,
             "cv_path": self.cv_path,
-            "profile_embedding": None
+            "profile_embedding": None,
+            "certificates": [c.to_dict() for c in (self.certificates or [])]
         }

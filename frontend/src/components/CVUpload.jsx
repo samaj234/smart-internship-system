@@ -72,6 +72,7 @@ export default function CVUpload({ onSuccess }) {
       const res = await API.post('/students/upload-cv', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      console.log('parsed_data:', res.data.parsed_data)  
       setParsedData(res.data.parsed_data)
       onSuccess?.(res.data.profile)
     } catch (err) {
@@ -185,6 +186,21 @@ export default function CVUpload({ onSuccess }) {
                       className="bg-white text-[#1AA29F] text-xs font-medium px-2.5 py-1 rounded-full border border-[#1AA29F]/30"
                     >
                       {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {parsedData.certifications?.length > 0 && (
+              <div>
+                <p className="text-gray-500 mb-1.5">Certifications detected:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {parsedData.certifications.map((cert, i) => (
+                    <span
+                      key={i}
+                      className="bg-amber-50 text-amber-700 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-200"
+                    >
+                      {cert}
                     </span>
                   ))}
                 </div>

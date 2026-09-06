@@ -13,6 +13,9 @@ class Application(db.Model):
     feedback_message = db.Column(db.Text)
     interview_date = db.Column(db.DateTime)
     start_date = db.Column(db.Date)
+    cover_letter_path = db.Column(db.String(255))
+    certificate_path = db.Column(db.String(255))
+    recommendation_letter_path = db.Column(db.String(255))
 
     def to_dict(self):
         return {
@@ -21,5 +24,8 @@ class Application(db.Model):
             "internship_id": self.internship_id,
             "status": self.status,
             "match_score": self.match_score,
-            "applied_at": self.applied_at.isoformat()
+            "applied_at": self.applied_at.isoformat(),
+            "cover_letter_path": self.cover_letter_path,
+            "certificate_path": self.certificate_path,
+            "recommendation_letter_path": self.recommendation_letter_path,
         }

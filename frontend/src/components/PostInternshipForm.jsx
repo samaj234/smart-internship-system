@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Briefcase, MapPin, Clock, DollarSign, Calendar, Tag, Save, Loader2, X } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Briefcase, MapPin, Clock, DollarSign, Calendar, Tag, Save, Loader2, X, Paperclip, Upload } from 'lucide-react'
 import API from '../api/axios'
 
 export default function PostInternshipForm({ existing, onSuccess, onCancel }) {
@@ -10,10 +10,52 @@ export default function PostInternshipForm({ existing, onSuccess, onCancel }) {
     location: existing?.location || '',
     duration: existing?.duration || '',
     stipend: existing?.stipend || '',
-    deadline: existing?.deadline ? existing.deadline.split('T')[0] : ''
+    deadline: existing?.deadline ? existing.deadline.split('T')[0] : '',
+    requires_cover_letter: existing?.requires_cover_letter || false,
+    requires_recommendation_letter: existing?.requires_recommendation_letter || false
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setParsing(true)
+    setError('')
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const res = await API.post('/internships/parse', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const parsed = res.data.parsed || {}
+
+      // Only overwrite fields the parser actually found something for —
+      // deadline is deliberately never touched here, and any field the
+      // parser couldn't confidently extract stays whatever the employer
+      // had already typed rather than getting blanked out.
+      setForm(prev => ({
+        ...prev,
+        title: parsed.title || prev.title,
+        description: parsed.description || prev.description,
+        required_skills: parsed.required_skills?.length
+          ? parsed.required_skills.join(', ')
+          : prev.required_skills,
+        location: parsed.location || prev.location,
+        duration: parsed.duration || prev.duration,
+        stipend: parsed.stipend || prev.stipend,
+      }))
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not parse that file — please fill the form in manually')
+    } finally {
+      setParsing(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -36,7 +78,9 @@ export default function PostInternshipForm({ existing, onSuccess, onCancel }) {
       location: form.location.trim(),
       duration: form.duration.trim(),
       stipend: form.stipend.trim(),
-      deadline: form.deadline || null
+      deadline: form.deadline || null,
+      requires_cover_letter: form.requires_cover_letter,
+      requires_recommendation_letter: form.requires_recommendation_letter
     }
 
     try {
@@ -73,6 +117,31 @@ export default function PostInternshipForm({ existing, onSuccess, onCancel }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-3">
+        {!existing && (
+          <div className="border border-dashed border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Have a job description file?</p>
+              <p className="text-xs text-gray-400">Upload a PDF or DOCX and we'll pre-fill the form below — you can still review and edit everything before posting.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={parsing}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap"
+            >
+              {parsing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+              {parsing ? 'Parsing...' : 'Upload file'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
+        )}
+
         <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F]">
           <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">Title *</label>
           <input
@@ -163,6 +232,36 @@ export default function PostInternshipForm({ existing, onSuccess, onCancel }) {
                 onChange={(e) => setForm({ ...form, deadline: e.target.value })}
               />
             </div>
+          </div>
+        </div>
+
+        <div className="border rounded-xl px-4 py-3">
+          <p className="text-xs text-[#1AA29F] font-medium flex items-center gap-1.5 mb-2">
+            <Paperclip size={13} />
+            Application requirements
+          </p>
+          <p className="text-xs text-gray-400 mb-3">
+            Choose which documents students must attach when they apply. A certificate is always optional — students can attach one if they have it.
+          </p>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="accent-[#1AA29F]"
+                checked={form.requires_cover_letter}
+                onChange={(e) => setForm({ ...form, requires_cover_letter: e.target.checked })}
+              />
+              Require a cover letter
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="accent-[#1AA29F]"
+                checked={form.requires_recommendation_letter}
+                onChange={(e) => setForm({ ...form, requires_recommendation_letter: e.target.checked })}
+              />
+              Require a recommendation letter
+            </label>
           </div>
         </div>
 

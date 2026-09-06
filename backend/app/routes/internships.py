@@ -1,12 +1,64 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from werkzeug.utils import secure_filename
+from datetime import datetime
+from sqlalchemy import or_
+import os
 from app import db
 from app.models import Internship, Employer
 from app.services.embedder import embed_text
+from app.services.job_parser import parse_job_description
 from app.schemas import CreateInternshipSchema, UpdateInternshipSchema
 from app.utils.validation import validate_request
 
+ALLOWED_JOB_DESC_EXTENSIONS = {'pdf', 'docx'}
+
 internships_bp = Blueprint('internships', __name__)
+
+
+@internships_bp.post('/parse')
+@jwt_required()
+def parse_job_description_route():
+    """
+    Lets an employer upload a job description file (PDF/DOCX) instead of
+    typing the posting by hand. Returns best-effort parsed fields for the
+    employer to review/edit in the form — it does NOT create an
+    internship itself; PostInternshipForm still submits via the normal
+    create_internship route afterward, same as CV upload pre-fills a
+    student profile without silently overwriting it.
+    """
+    user_id = int(get_jwt_identity())
+    employer = Employer.query.filter_by(user_id=user_id).first()
+
+    if not employer:
+        return jsonify({"error": "Employer profile not found"}), 404
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_JOB_DESC_EXTENSIONS:
+        return jsonify({"error": "Only PDF and DOCX files allowed"}), 400
+
+    filename = secure_filename(f"jobdesc_{employer.id}_{file.filename}")
+    filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    try:
+        parsed = parse_job_description(filepath)
+    finally:
+        # Nothing references this file afterward — it's only needed long
+        # enough to extract text from it, unlike a CV or certificate.
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
+
+    return jsonify({"parsed": parsed}), 200
 
 @internships_bp.get('/')
 def get_all_internships():
@@ -19,7 +71,14 @@ def get_all_internships():
     page = max(page, 1)
     limit = min(max(limit, 1), 50)
 
-    query = Internship.query.filter_by(is_active=True)
+    # An internship with no deadline never expires; one with a deadline
+    # in the past is hidden from students automatically, without needing
+    # a background job to flip is_active — the query stays the single
+    # source of truth for "currently applyable."
+    query = Internship.query.filter(
+        Internship.is_active == True,
+        or_(Internship.deadline.is_(None), Internship.deadline >= datetime.utcnow())
+    )
 
     if search:
         query = query.filter(Internship.title.ilike(f"%{search}%"))
@@ -100,6 +159,8 @@ def create_internship():
         duration=data.get('duration', ''),
         stipend=data.get('stipend', ''),
         deadline=data.get('deadline'),
+        requires_cover_letter=data.get('requires_cover_letter', False),
+        requires_recommendation_letter=data.get('requires_recommendation_letter', False),
         description_embedding=embed_text(embed_input)
     )
 
@@ -133,6 +194,8 @@ def update_internship(internship_id):
     internship.duration = data.get('duration', internship.duration)
     internship.stipend = data.get('stipend', internship.stipend)
     internship.is_active = data.get('is_active', internship.is_active)
+    internship.requires_cover_letter = data.get('requires_cover_letter', internship.requires_cover_letter)
+    internship.requires_recommendation_letter = data.get('requires_recommendation_letter', internship.requires_recommendation_letter)
 
     if 'deadline' in data:
         internship.deadline = data['deadline']

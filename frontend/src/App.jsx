@@ -12,6 +12,9 @@ import Navbar from './components/Navbar'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import ChatBot from './components/ChatBot'
+import Landing from './pages/Landing'
+import Notifications from './pages/Notifications'
+
 
 function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth()
@@ -48,7 +51,7 @@ function PageWrapper({ children }) {
 function AnimatedRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" />} />
+      <Route path="/" element={<Landing />} /> 
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
@@ -70,6 +73,12 @@ function AnimatedRoutes() {
         </ProtectedRoute>
       } />
 
+      <Route path="/notifications" element={
+        <ProtectedRoute>
+          <Notifications />
+        </ProtectedRoute>
+      } />
+
       <Route path="/internships" element={<Internships />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
@@ -80,7 +89,7 @@ function AnimatedRoutes() {
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen flex flex-col bg-[#748d92]">
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#e6f7f7] to-white">
         <Navbar />
         <main className="flex-1 flex flex-col pt-16">
           <AnimatedRoutes />

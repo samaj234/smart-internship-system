@@ -16,6 +16,8 @@ class Internship(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     description_embedding = db.Column(db.JSON)   # SBERT vector stored as list
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    requires_cover_letter = db.Column(db.Boolean, default=False)
+    requires_recommendation_letter = db.Column(db.Boolean, default=False)
 
     # Relationships
     applications = db.relationship('Application', backref='internship')
@@ -35,5 +37,6 @@ class Internship(db.Model):
             "company_name": self.employer.company_name if self.employer else None,
             "company_industry": self.employer.industry if self.employer else None,
             "company_website": self.employer.website if self.employer else None,
+            "requires_cover_letter": self.requires_cover_letter,
+            "requires_recommendation_letter": self.requires_recommendation_letter,
         }
-    

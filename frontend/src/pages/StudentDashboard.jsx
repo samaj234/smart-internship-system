@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { User, Phone, GraduationCap, Award, Save, Loader2, Pencil, X, BarChart3 } from 'lucide-react'
 import API from '../api/axios'
 import CVUpload from '../components/CVUpload'
+import CertificateManager from '../components/CertificateManager'
 import { useToast } from '../context/ToastContext'
 import { Calendar, PartyPopper } from 'lucide-react'
-
 
 export default function StudentDashboard() {
   const [profile, setProfile] = useState(null)
@@ -16,10 +16,13 @@ export default function StudentDashboard() {
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const toast = useToast()
+
+  // Use a ref to store the saved profile for cancel/reset
+  // This avoids the stale closure issue that was causing
+  // syncFormFromProfile to fire on every keystroke
   const savedProfileRef = useRef(null)
 
   useEffect(() => {
-    console.log('StudentDashboard useEffect fired at', new Date().toISOString())
     let isMounted = true
 
     const fetchData = async () => {
@@ -30,6 +33,8 @@ export default function StudentDashboard() {
         const profileData = profileRes.data
         savedProfileRef.current = profileData
         setProfile(profileData)
+
+        // Only set form once on initial load
         setForm({
           full_name: profileData.full_name || '',
           phone: profileData.phone || '',
@@ -47,11 +52,15 @@ export default function StudentDashboard() {
       try {
         const appsRes = await API.get('/matching/my-applications')
         if (isMounted) {
-          console.log('my-applications response:', appsRes.data)
-          setApplications(appsRes.data.applications || [])
+          // Internships the employer has withdrawn/deactivated come back
+          // with status "withdrawn" — filter those out rather than
+          // showing a dead-end application in the list.
+          const active = (appsRes.data.applications || []).filter(
+            (app) => app.status !== 'withdrawn'
+          )
+          setApplications(active)
         }
       } catch (err) {
-        console.error('my-applications error:', err.response?.data)
         if (isMounted) setApplications([])
       }
     }
@@ -59,9 +68,10 @@ export default function StudentDashboard() {
     fetchData()
 
     return () => { isMounted = false }
-  }, [])
+  }, []) // empty deps — runs once only
 
   const handleEditClick = () => {
+    // Reset form to last saved values from ref
     const saved = savedProfileRef.current
     if (saved) {
       setForm({
@@ -77,6 +87,7 @@ export default function StudentDashboard() {
   }
 
   const handleCancel = () => {
+    // Reset form to last saved values from ref
     const saved = savedProfileRef.current
     if (saved) {
       setForm({
@@ -104,6 +115,7 @@ export default function StudentDashboard() {
         gpa: form.gpa ? parseFloat(form.gpa) : null,
         skills: skillsArray
       })
+      // Update both profile state and the ref
       setProfile(res.data)
       savedProfileRef.current = res.data
       toast.success('Profile updated successfully')
@@ -116,8 +128,11 @@ export default function StudentDashboard() {
   }
 
   const handleCvSuccess = (updatedProfile) => {
+    // Update profile display and ref
     setProfile(updatedProfile)
     savedProfileRef.current = updatedProfile
+    // Only update form if NOT currently editing
+    // — this was the original bug source
     if (!isEditing) {
       setForm({
         full_name: updatedProfile.full_name || '',
@@ -303,6 +318,17 @@ export default function StudentDashboard() {
         </div>
       </div>
 
+      {/* Certificates — compact, full-width; mainly viewed by employers reviewing applicants */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="font-bold text-gray-800">Certificates</h2>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          Employers can view these when reviewing your applications.
+        </p>
+        <CertificateManager />
+      </div>
+
       {/* Applications */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-6">
         <h2 className="font-bold text-gray-800 mb-4">My Applications</h2>
@@ -315,7 +341,7 @@ export default function StudentDashboard() {
           </p>
         ) : (
           <div className="space-y-2">
-           {applications.map((app) => (
+            {applications.map((app) => (
   <div key={app.id} className="border border-gray-100 rounded-xl px-4 py-3">
     <div className="flex items-center justify-between">
       <div>
@@ -336,19 +362,16 @@ export default function StudentDashboard() {
       </div>
     </div>
 
-    {(app.feedback_message || app.interview_date || app.start_date) && (
+    {(app.interview_date || app.start_date) && (
       <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
-        {app.feedback_message && (
-          <p className="text-sm text-gray-600">{app.feedback_message}</p>
-        )}
         {app.interview_date && (
           <p className="text-xs text-[#1AA29F] font-medium">
-             <Calendar size={13} /> Interview: {new Date(app.interview_date).toLocaleString()}
+            <Calendar size={13}/> Interview: {new Date(app.interview_date).toLocaleString()}
           </p>
         )}
         {app.start_date && (
           <p className="text-xs text-[#1AA29F] font-medium">
-           <PartyPopper size={13} /> Proposed start date: {new Date(app.start_date).toLocaleDateString()}
+            <PartyPopper size={13} /> Proposed start date: {new Date(app.start_date).toLocaleDateString()}
           </p>
         )}
       </div>
