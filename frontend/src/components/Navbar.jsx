@@ -21,35 +21,67 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  useEffect(() => {
-    // No setState here — the bell/badge only renders inside the
-    // logged-in branch of the JSX below, so a stale unreadCount value
-    // is simply never shown once user is null. Calling setState
-    // synchronously in the effect body for this was unnecessary and
-    // is what React's cascading-render warning was flagging.
+    useEffect(() => {
     if (!user) return
 
     let isMounted = true
+    let timer = null
+    let delay = 30000                 // 30s baseline — gentle on the server
+    const MIN_DELAY = 30000
+    const MAX_DELAY = 5 * 60 * 1000   // cap at 5 minutes on repeated failure
+
     const fetchUnreadCount = async () => {
+      if (!isMounted) return
+      // Don't poll while the tab is hidden — saves server load when
+      // teammates leave the app open in a background tab.
+      if (document.visibilityState !== 'visible') {
+        scheduleNext()
+        return
+      }
       try {
         const res = await API.get('/notifications/unread-count')
         if (isMounted) setUnreadCount(res.data.unread_count || 0)
+        delay = MIN_DELAY             // reset backoff on success
       } catch (err) {
         // Silent — a failed unread count shouldn't disrupt the rest of the nav.
+        delay = Math.min(delay * 2, MAX_DELAY)   // exponential backoff
+      } finally {
+        scheduleNext()
+      }
+    }
+
+    const scheduleNext = () => {
+      if (!isMounted) return
+      clearTimeout(timer)
+      timer = setTimeout(fetchUnreadCount, delay)
+    }
+
+    // Fired immediately when a notification is read/deleted, and also
+    // when the tab regains focus, so the badge updates instantly
+    // instead of waiting up to 30s.
+    const onChanged = () => {
+      delay = MIN_DELAY
+      clearTimeout(timer)
+      fetchUnreadCount()
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        delay = MIN_DELAY
+        clearTimeout(timer)
+        fetchUnreadCount()
       }
     }
 
     fetchUnreadCount()
-    // Poll periodically so the badge updates even without any action —
-    // but also listen for an explicit signal so reading/deleting a
-    // notification on the /notifications page updates the badge
-    // instantly instead of waiting up to 30s for the next poll.
-    const interval = setInterval(fetchUnreadCount, 1000)
-    window.addEventListener('notifications:changed', fetchUnreadCount)
+    window.addEventListener('notifications:changed', onChanged)
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       isMounted = false
-      clearInterval(interval)
-      window.removeEventListener('notifications:changed', fetchUnreadCount)
+      clearTimeout(timer)
+      window.removeEventListener('notifications:changed', onChanged)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [user])
 
