@@ -156,7 +156,7 @@ export default function PostInternshipForm({ existing, onSuccess, onCancel }) {
         <div className="relative border rounded-xl px-3 pt-4 pb-2 focus-within:border-[#1AA29F]">
           <label className="absolute top-1 left-3 text-xs text-[#1AA29F] font-medium">Description *</label>
           <textarea
-            rows={4}
+            rows={8}
             placeholder="Describe the role, responsibilities, and what makes a great candidate..."
             className="w-full outline-none text-sm text-gray-700 bg-transparent resize-none"
             value={form.description}
