@@ -2,71 +2,60 @@ import os
 import csv
 import spacy
 from spacy.matcher import PhraseMatcher
-from wordfreq import zipf_frequency
+
+from app.services.skill_synonyms import SKILL_SYNONYMS
 
 ESCO_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'dataset', 'esco_skills_en.csv')
 
 _nlp = spacy.load("en_core_web_sm")
 _matcher = PhraseMatcher(_nlp.vocab, attr="LOWER")  # case-insensitive matching
-_pattern_to_canonical = {}  # matched text (lowercased) -> canonical ESCO label
+_pattern_to_canonical = {}  # matched text (lowercased) -> canonical label
 _loaded = False
-
-# zipf_frequency gives a log-scale estimate of how common a word is in
-# everyday English (~7 = extremely common word like "the"; ~3 = rare).
-# Above this threshold, a *single-word* ESCO term is common enough in
-# ordinary usage that a bare phrase match against free text is more
-# likely to be a coincidental English word than a genuine skill mention.
-COMMON_WORD_ZIPF_THRESHOLD = 4.0
-
-# Single-word terms that would otherwise be filtered by the frequency
-# check above, but are common enough in tech/professional CVs and job
-# postings that we want to keep matching them regardless.
-SINGLE_WORD_ALLOWLIST = {
-    'excel', 'sql', 'java', 'docker', 'photoshop', 'figma',
-}
-
-# Terms the frequency check alone doesn't catch (multi-word phrases,
-# or single words that don't score as "common" but still cause false
-# positives in practice) — grown from QA / user reports over time.
-AMBIGUOUS_TERM_BLOCKLIST = {
-    'dies', 'die', 'grammar', 'lead',
-}
-
-
-def _is_too_ambiguous(term: str) -> bool:
-    key = term.lower()
-    if key in AMBIGUOUS_TERM_BLOCKLIST:
-        return True
-    if key in SINGLE_WORD_ALLOWLIST:
-        return False
-    # Only single-token terms go through the frequency check — a
-    # multi-word phrase like "lead police investigations" is specific
-    # enough that ordinary-English-word overlap isn't a real risk.
-    is_single_word = ' ' not in key
-    if is_single_word and zipf_frequency(key, 'en') >= COMMON_WORD_ZIPF_THRESHOLD:
-        return True
-    return False
 
 
 def _load_esco_patterns():
     """
-    Builds spaCy match patterns directly from ESCO's preferredLabel,
-    altLabels, and hiddenLabels columns. Every label/alias becomes a
-    phrase pattern; matches are pre-mapped to their canonical label,
-    so extraction and normalization happen in a single step.
+    Builds spaCy match patterns from two sources:
 
-    Terms flagged by `_is_too_ambiguous` (either a common English word
-    with no tech-context override, or an explicitly blocklisted term)
-    are excluded from matching entirely — see the module docstring
-    comments above `AMBIGUOUS_TERM_BLOCKLIST` for why.
+    1. ESCO's preferredLabel/altLabels/hiddenLabels — the original
+       source. ESCO is broad and conceptual; it generally does NOT
+       include specific software product names ("Microsoft Excel"),
+       everyday soft-skill phrasings ("Teamwork", "Report Writing"),
+       or niche/proprietary terms. Those are structurally impossible
+       to extract from ESCO alone, no matter how clearly a CV states
+       them.
+
+    2. skill_synonyms.py's canonical skill names — added specifically
+       to close that gap. That file already curates exactly the terms
+       ESCO is missing (Microsoft Excel, Communication, Teamwork,
+       Data Entry, etc.), but until now it was only used to compare
+       two already-extracted skill strings, never to extract from raw
+       text in the first place.
+
+    Deliberately uses ONLY the synonym dict's canonical key names, not
+    its full alias lists. Many aliases are short, ambiguous tokens
+    ("cv" for computer vision, "ai" for artificial intelligence, "js",
+    "go", "ps") that would cause false-positive extractions if matched
+    against raw free text — e.g. "cv" would match constantly, since
+    every résumé says "CV" to mean the document itself, not Computer
+    Vision. Canonical names were deliberately written to be more
+    complete/specific ("microsoft excel", not "excel") and carry much
+    lower false-positive risk as extraction patterns. Short aliases
+    remain fully available for post-extraction comparison via
+    skills_match() — this restriction only applies to what's used for
+    pulling terms out of raw text.
+
+    ESCO matches take priority when both sources define the same
+    literal string, so this only fills genuine gaps rather than
+    overriding ESCO's own labeling.
     """
     global _loaded
     if _loaded:
         return
 
     patterns = []
-    skipped = []
 
+    # --- Source 1: ESCO taxonomy ---
     with open(ESCO_PATH, encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -84,25 +73,33 @@ def _load_esco_patterns():
 
             for term in all_terms:
                 key = term.lower()
-                if _is_too_ambiguous(term):
-                    skipped.append(term)
-                    continue
                 if key not in _pattern_to_canonical:  # keep first canonical mapping if duplicates
                     _pattern_to_canonical[key] = canonical
                     patterns.append(_nlp.make_doc(term))
 
-    _matcher.add("ESCO_SKILL", patterns)
+    esco_pattern_count = len(patterns)
+
+    # --- Source 2: curated synonym-dictionary canonical names ---
+    for canonical in SKILL_SYNONYMS:
+        key = canonical.lower().strip()
+        if key not in _pattern_to_canonical:  # ESCO's own labeling wins on overlap
+            _pattern_to_canonical[key] = canonical
+            patterns.append(_nlp.make_doc(canonical))
+
+    _matcher.add("SKILL", patterns)
     _loaded = True
-    print(f"Loaded {len(patterns)} ESCO skill patterns for extraction")
-    print(f"Skipped {len(skipped)} ambiguous/common-word terms")
+    print(f"Loaded {esco_pattern_count} ESCO skill patterns and "
+          f"{len(patterns) - esco_pattern_count} synonym-dictionary patterns "
+          f"for extraction ({len(patterns)} total)")
 
 
 def extract_raw_skills(text: str) -> list:
     """
-    Extracts skill mentions from text by matching against the full
-    ESCO vocabulary directly. Returns canonical ESCO labels — no
-    separate normalization step needed since matches are already
-    keyed to their preferredLabel.
+    Extracts skill mentions from text by matching against the ESCO
+    taxonomy AND the curated skill-synonym dictionary's canonical
+    names. Returns canonical labels — ESCO's preferredLabel for ESCO
+    matches, or the synonym dictionary's canonical name for anything
+    ESCO doesn't cover.
     """
     _load_esco_patterns()
 

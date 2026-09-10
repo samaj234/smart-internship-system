@@ -10,6 +10,15 @@ Structure: each key is a canonical skill name, and its value
 is a list of aliases that should be treated as equivalent.
 The normalize_skill() function maps any alias back to its
 canonical form before comparison.
+
+IMPORTANT: every alias string must appear under exactly ONE
+canonical key. If a Python dict literal defines the same key
+twice, or the same alias string under two different canonical
+keys, the later definition silently wins with no error — that
+class of bug previously caused "AI" to resolve to "illustrator"
+instead of "artificial intelligence", and dropped "team work" as
+an alias of "teamwork" entirely. _validate_no_collisions() below
+runs at import time specifically to catch this again if it recurs.
 """
 
 SKILL_SYNONYMS = {
@@ -28,7 +37,7 @@ SKILL_SYNONYMS = {
     "scala": ["scala lang"],
 
     # Web frameworks & libraries
-    "react": ["reactjs", "react.js", "react js", "react native"],
+    "react": ["reactjs", "react.js", "react js"],
     "angular": ["angularjs", "angular.js", "angular js"],
     "vue": ["vuejs", "vue.js", "vue js"],
     "node.js": ["nodejs", "node js", "node"],
@@ -41,7 +50,7 @@ SKILL_SYNONYMS = {
     "nuxt": ["nuxtjs", "nuxt.js"],
 
     # Databases
-    "sql": ["structured query language", "t-sql", "pl/sql", "mysql", "sql server"],
+    "sql": ["structured query language", "t-sql", "pl/sql"],
     "postgresql": ["postgres", "psql", "pg"],
     "mongodb": ["mongo", "mongo db"],
     "mysql": ["my sql"],
@@ -78,10 +87,12 @@ SKILL_SYNONYMS = {
     "tableau": ["tableau desktop", "tableau server"],
     "power bi": ["powerbi", "microsoft power bi", "ms power bi"],
 
-    # Version control
-    "git": ["github", "gitlab", "bitbucket", "version control"],
-    "github": ["gh", "git hub"],
-    "gitlab": ["git lab"],
+    # Version control — github/gitlab/bitbucket are treated as
+    # equivalent to "git" itself for matching purposes, rather than
+    # as separate skills, since a resume mentioning any of them
+    # signals the same underlying version-control competency.
+    "git": ["github", "gitlab", "git hub", "git lab", "gh",
+            "bitbucket", "version control"],
 
     # Mobile
     "android": ["android development", "android studio"],
@@ -100,19 +111,18 @@ SKILL_SYNONYMS = {
     "ui/ux": ["ui", "ux", "user interface", "user experience", "ui design", "ux design"],
     "figma": ["figma design"],
     "photoshop": ["adobe photoshop", "ps"],
-    "illustrator": ["adobe illustrator", "ai"],
+    "illustrator": ["adobe illustrator"],
     "sketch": ["sketch app"],
 
-    # Microsoft Office
-    "excel": ["microsoft excel", "ms excel", "spreadsheets"],
-    "word": ["microsoft word", "ms word"],
-    "powerpoint": ["microsoft powerpoint", "ms powerpoint", "ppt"],
-    "microsoft office": ["ms office", "office 365", "microsoft 365"],
+    # Microsoft Office — "word"/"excel"/"office" consolidated into
+    # single canonical entries each (previously split across two
+    # conflicting definitions per skill).
     "microsoft word": ["word", "ms word", "microsoft word processor"],
     "microsoft excel": ["excel", "ms excel", "spreadsheets", "spreadsheet"],
-    "data entry": ["data-entry", "data input", "data processing", "typing"],
+    "powerpoint": ["microsoft powerpoint", "ms powerpoint", "ppt"],
     "microsoft office": ["ms office", "office 365", "microsoft 365", "office suite"],
-        
+    "data entry": ["data-entry", "data input", "data processing", "typing"],
+
     # Other technical
     "rest api": ["rest", "restful", "restful api", "api", "rest apis"],
     "graphql": ["graph ql"],
@@ -126,13 +136,16 @@ SKILL_SYNONYMS = {
     "salesforce": ["sfdc", "salesforce crm"],
     "report writing": ["report-writing", "writing reports", "business writing"],
     "customer service": ["customer support", "client service", "customer care"],
-    "communication": ["communications", "verbal communication", "written communication"],
+
+    # Soft skills — "communication" and "teamwork" consolidated into
+    # single entries each (previously split into two conflicting
+    # definitions, silently dropping "communications" and "team work"
+    # as recognized aliases).
+    "communication": ["communications", "verbal communication",
+                       "written communication", "communication skills"],
     "teamwork": ["team work", "team player", "collaborative", "collaboration"],
-    # Soft skills
-    "communication": ["verbal communication", "written communication", "communication skills"],
     "leadership": ["team leadership", "people management", "managing teams"],
     "problem solving": ["problem-solving", "analytical skills", "critical thinking"],
-    "teamwork": ["team player", "collaboration", "collaborative"],
     "time management": ["multitasking", "prioritization"],
     "presentation": ["public speaking", "presenting"],
     "financial reporting": ["financial reports", "financial statements", "reporting"],
@@ -140,11 +153,34 @@ SKILL_SYNONYMS = {
     "banking operations": ["banking", "bank operations", "banking services"],
 }
 
+
+def _validate_no_collisions():
+    """Runs at import time. Raises immediately if any alias string is
+    claimed by more than one canonical skill, or if the same alias
+    appears twice under the same skill — both are silent-failure
+    patterns that previously caused real "present skill reported as
+    missing" bugs (see AI/illustrator and teamwork/team-work above).
+    Fail loudly at import time instead of silently at match time."""
+    seen = {}
+    for canonical, aliases in SKILL_SYNONYMS.items():
+        for alias in [canonical] + aliases:
+            key = alias.lower().strip()
+            if key in seen and seen[key] != canonical:
+                raise ValueError(
+                    f"Skill synonym collision: '{alias}' is claimed by both "
+                    f"'{seen[key]}' and '{canonical}'. Each alias must map "
+                    f"to exactly one canonical skill — fix SKILL_SYNONYMS "
+                    f"before this can be trusted."
+                )
+            seen[key] = canonical
+
+
+_validate_no_collisions()
+
 # Build reverse lookup: alias → canonical name
-# This lets us quickly find the canonical form of any alias
 _ALIAS_TO_CANONICAL = {}
 for canonical, aliases in SKILL_SYNONYMS.items():
-    _ALIAS_TO_CANONICAL[canonical] = canonical  # canonical maps to itself
+    _ALIAS_TO_CANONICAL[canonical] = canonical
     for alias in aliases:
         _ALIAS_TO_CANONICAL[alias.lower().strip()] = canonical
 

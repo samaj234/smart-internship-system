@@ -8,6 +8,7 @@ import spacy
 from app.services.skill_extractor import extract_raw_skills
 from app.services.certificate_matcher import extract_certifications
 
+
 nlp = spacy.load("en_core_web_sm")
 
 # How far into the document to look for contact info (name, email, phone).
