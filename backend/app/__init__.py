@@ -5,18 +5,55 @@ from flask_cors import CORS
 from .config import Config
 from flask_mail import Mail
 
+
 db = SQLAlchemy()
 jwt = JWTManager()
 mail = Mail()
 
 def create_app():
+    import os
     app = Flask(__name__)
     app.config.from_object(Config)
 
     db.init_app(app)
     jwt.init_app(app)
     mail.init_app(app)
-    CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+    allowed_origins = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,https://smart-internship-system-eight.vercel.app"
+    ).split(",")
+
+    allowed_origins = [origin.strip() for origin in allowed_origins]
+
+    allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,https://smart-internship-system-eight.vercel.app"
+    ).split(",")
+
+    allowed_origins = [origin.strip() for origin in allowed_origins]
+
+    CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": allowed_origins,
+            "methods": [
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"
+            ],
+            "allow_headers": [
+                "Content-Type",
+                "Authorization",
+                "ngrok-skip-browser-warning"
+            ],
+            "supports_credentials": True
+        }
+    }
+)
 
     from .routes.auth import auth_bp
     from .routes.students import students_bp
