@@ -13,7 +13,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import ChatBot from './components/ChatBot'
 import Landing from './pages/Landing'
-import Notifications from './pages/notifications'
+import Notifications from './pages/Notifications'
 
 
 function ProtectedRoute({ children, role }) {
