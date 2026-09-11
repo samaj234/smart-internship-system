@@ -221,3 +221,17 @@ def delete_internship(internship_id):
     internship.is_active = False
     db.session.commit()
     return jsonify({"message": "Internship deactivated"}), 200
+
+@internships_bp.patch('/<int:internship_id>/reactivate')
+@jwt_required()
+def reactivate_internship(internship_id):
+    user_id = int(get_jwt_identity())
+    employer = Employer.query.filter_by(user_id=user_id).first()
+    internship = Internship.query.get_or_404(internship_id)
+
+    if internship.employer_id != employer.id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    internship.is_active = True
+    db.session.commit()
+    return jsonify({"message": "Internship reactivated"}), 200
